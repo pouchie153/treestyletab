@@ -669,3 +669,15 @@ export async function startTracking() {
   if (granted && !browser.bookmarks.onCreated.hasListener(onBookmarksCreated))
     browser.bookmarks.onCreated.addListener(onBookmarksCreated);
 }
+
+export async function ensureBookmarksPermission() {
+  try {
+    let granted = await browser.permissions.request(Permissions.BOOKMARKS).catch(console.error);
+    if (granted === undefined)
+      granted = await Permissions.isGranted(Permissions.BOOKMARKS);
+    return !!granted;
+  }
+  catch(_error) {
+  }
+  return false;
+}

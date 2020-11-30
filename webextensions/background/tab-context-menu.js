@@ -12,7 +12,9 @@ import {
   sanitizeForHTMLText
 } from '/common/common.js';
 import * as ApiTabs from '/common/api-tabs.js';
+import * as Bookmark from '/common/bookmark.js';
 import * as Constants from '/common/constants.js';
+import * as Permissions from '/common/permissions.js';
 import * as TabsStore from '/common/tabs-store.js';
 import * as TabsInternalOperation from '/common/tabs-internal-operation.js';
 import * as TreeBehavior from '/common/tree-behavior.js';
@@ -49,6 +51,15 @@ const SAFE_MENU_PROPERTIES = [
   'type',
   'visible'
 ];
+
+const ITEMS_REQUIRE_BOOKMARKS_PERMISSION = new Set([
+  'context_bookmarkTab',
+  'context_bookmarkSelected',
+  'context_topLevel_bookmarkTree',
+  'noContextTab:context_bookmarkSelected'
+]);
+
+let mBookmarkPermissionGranted;
 
 const mItemsById = {
   'context_reloadTab': {
@@ -532,6 +543,10 @@ async function onShown(info, contextTab) {
       [];
   const hasChild              = contextTab && contextTabs.some(tab => tab.$TST.hasChild);
 
+  Permissions.isGranted(Permissions.BOOKMARKS)
+    .catch(_error => false)
+    .then(granted => mBookmarkPermissionGranted = granted);
+
   if (mOverriddenContext)
     return onOverriddenMenuShown(info, contextTab, windowId);
 
@@ -860,6 +875,12 @@ function onHidden() {
 }
 
 async function onClick(info, contextTab) {
+  const menuItemId = info.menuItemId.replace(/^noContextTab:/, '');
+  if (!mBookmarkPermissionGranted &&
+      ITEMS_REQUIRE_BOOKMARKS_PERMISSION.has(menuItemId) &&
+      !(await Bookmark.ensureBookmarksPermission()))
+    return;
+
   contextTab = contextTab && Tab.get(contextTab.id);
   const window    = await browser.windows.getLastFocused({ populate: true }).catch(ApiTabs.createErrorHandler());
   const windowId  = contextTab && contextTab.windowId || window.id;
@@ -870,7 +891,7 @@ async function onClick(info, contextTab) {
   if (!isMultiselected)
     multiselectedTabs = null;
 
-  switch (info.menuItemId.replace(/^noContextTab:/, '')) {
+  switch (menuItemId) {
     case 'context_reloadTab':
       if (multiselectedTabs) {
         for (const tab of multiselectedTabs) {

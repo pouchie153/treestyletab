@@ -13,6 +13,7 @@ import {
 import * as ApiTabs from '/common/api-tabs.js';
 import * as TSTAPI from '/common/tst-api.js';
 import * as Bookmark from '/common/bookmark.js';
+import * as Permissions from '/common/permissions.js';
 import * as Sync from '/common/sync.js';
 import * as TabContextMenu from './tab-context-menu.js';
 
@@ -56,6 +57,14 @@ const manifest = browser.runtime.getManifest();
 
 const kROOT_TAB_ITEM = 'treestyletab';
 const kROOT_BOOKMARK_ITEM = 'treestyletab-bookmark';
+
+const ITEMS_REQUIRE_BOOKMARKS_PERMISSION = new Set([
+  'bookmarkTree',
+  'openAllBookmarksWithStructure',
+  'openAllBookmarksWithStructureRecursively'
+]);
+
+let mBookmarkPermissionGranted;
 
 const mTabItemsById = {
   'reloadTree': {
@@ -400,7 +409,13 @@ function updateItems({ multiselected } = {}) {
   return updated;
 }
 
-export function onClick(info, tab) {
+export async function onClick(info, tab) {
+  const menuItemId = info.menuItemId.replace(/^noContextTab:/, '');
+  if (!mBookmarkPermissionGranted &&
+      ITEMS_REQUIRE_BOOKMARKS_PERMISSION.has(menuItemId) &&
+      !(await Bookmark.ensureBookmarksPermission()))
+    return;
+
   if (info.bookmarkId)
     return onBookmarkItemClick(info);
   else
@@ -527,6 +542,10 @@ async function onBookmarkItemClick(info) {
 }
 
 function onShown(info, tab) {
+  Permissions.isGranted(Permissions.BOOKMARKS)
+    .catch(_error => false)
+    .then(granted => mBookmarkPermissionGranted = granted);
+
   if (info.contexts.includes('tab'))
     onTabContextMenuShown(info, tab);
   else if (info.contexts.includes('bookmark'))
